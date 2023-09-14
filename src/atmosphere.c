@@ -30,6 +30,7 @@ void update_atmosphere_pass(sokol_offscreen_pass_t *pass)
     pass->pass_action = sokol_clear_action((ecs_rgb_t){1, 1, 1}, false, false),
     pass->color_target = sokol_target_rgba16f(
         "Atmos color target", 256, 256, 1, 1);
+    pass->color_sampler = sokol_sampler(1);
     pass->pass = sg_make_pass(&(sg_pass_desc){
         .color_attachments[0].image = pass->color_target,
         .label = "atmosphere-pass"

@@ -45,6 +45,7 @@ typedef struct sokol_fx_output_t {
     int16_t width;
     int16_t height;    
     sg_image out[2];
+    sg_sampler sampler[2];
     sg_pass pass[2];
     int8_t step_count;
     int8_t toggle;
@@ -87,6 +88,11 @@ typedef struct sokol_fx_resources_t {
     SokolFx blend;
 } sokol_fx_resources_t;
 
+typedef struct sokol_fx_run_result_t {
+    sg_image img;
+    sg_sampler sampler;
+} sokol_fx_run_result_t;
+
 /* Map input index to effect input */
 #define SOKOL_FX_INPUT(index) (index)
 
@@ -100,10 +106,11 @@ void sokol_effect_set_param(
     const char *param,
     float value);
 
-sg_image sokol_fx_run(
+sokol_fx_run_result_t sokol_fx_run(
     SokolFx *effect,
     int32_t input_count,
     sg_image inputs[],
+    sg_sampler samplers[],
     sokol_render_state_t *state,
     sokol_screen_pass_t *screen_pass);
 

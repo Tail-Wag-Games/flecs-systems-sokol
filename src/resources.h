@@ -26,6 +26,8 @@ sg_image sokol_target_depth(
     int32_t height,
     int32_t sample_count);
 
+sg_sampler sokol_sampler(int32_t num_mipmaps);
+
 sg_image sokol_target(
     const char *label,
     int32_t width, 
@@ -37,6 +39,8 @@ sg_image sokol_target(
 sg_image sokol_noise_texture(int32_t width, int32_t height);
 
 sg_image sokol_bg_texture(ecs_rgb_t color, int32_t width, int32_t height);
+
+sg_sampler sokol_bg_sampler();
 
 sg_buffer sokol_buffer_quad(void);
 

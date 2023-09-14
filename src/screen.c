@@ -18,7 +18,6 @@ sg_pipeline init_screen_pipeline() {
                 "}\n"
                 ,
             .images[0] = {
-                .name = "screen",
                 .image_type = SG_IMAGETYPE_2D
             }
         }
@@ -57,7 +56,7 @@ void sokol_run_screen_pass(
         .vertex_buffers = { 
             [0] = resources->quad 
         },
-        .fs_images[0] = img
+        .fs.images[0] = img
     };
 
     sg_apply_bindings(&bind);

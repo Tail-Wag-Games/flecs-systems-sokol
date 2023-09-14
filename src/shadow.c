@@ -7,6 +7,7 @@ typedef struct shadow_vs_uniforms_t {
 } shadow_vs_uniforms_t;
 
 sg_image joint_texture();
+sg_sampler joint_sampler();
 float joint_pixel_width();
 float joint_texture_u();
 float joint_texture_v();
@@ -113,6 +114,7 @@ sokol_offscreen_pass_t sokol_init_shadow_pass(
 
     result.depth_target = sokol_target_depth(size, size, 1);
     result.color_target = sokol_target_rgba8("Shadow map", size, size, 1);
+    result.color_sampler = sokol_sampler(1);
 
     result.pass = sg_make_pass(&(sg_pass_desc){
         .color_attachments[0].image = result.color_target,
@@ -124,8 +126,21 @@ sokol_offscreen_pass_t sokol_init_shadow_pass(
         .vs = {
             .images = {
                 [0] = {
-                    .name = "u_joint_tex",
-                    .image_type = SG_IMAGETYPE_2D
+                    .image_type = SG_IMAGETYPE_2D,
+                    .used = true,
+                }
+            },
+            .samplers = {
+                [0] = {
+                    .used = true
+                }
+            },
+            .image_sampler_pairs = {
+                [0] = {
+                    .used = true,
+                    .image_slot = 0,
+                    .sampler_slot = 0,
+                    .glsl_name = "u_joint_tex"
                 }
             },
             .uniform_blocks = {
@@ -191,7 +206,8 @@ void shadow_draw_instances(
             [0] = geometry->vertices
         },
         .index_buffer = geometry->indices,
-        .vs_images[0] = joint_texture()
+        .vs.images[0] = joint_texture(),
+        .vs.samplers[0] = joint_sampler()
     };
 
     sg_apply_bindings(&bind);

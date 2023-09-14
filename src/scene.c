@@ -26,6 +26,7 @@ typedef struct scene_fs_sun_atmos_uniforms_t {
 } scene_fs_sun_atmos_uniforms_t;
 
 sg_image joint_texture();
+sg_sampler joint_sampler();
 float joint_pixel_width();
 float joint_texture_u();
 float joint_texture_v();
@@ -76,8 +77,21 @@ sg_pipeline init_scene_pipeline(int32_t sample_count) {
         .vs = {
             .images = {
                 [0] = {
-                    .name = "u_joint_tex",
-                    .image_type = SG_IMAGETYPE_2D
+                    .image_type = SG_IMAGETYPE_2D,
+                    .used = true
+                }
+            },
+            .samplers = {
+                [0] = {
+                    .used = true
+                }
+            },
+            .image_sampler_pairs = {
+                [0] = {
+                    .used = true,
+                    .image_slot = 0,
+                    .sampler_slot = 0,
+                    .glsl_name = "u_joint_tex"
                 }
             },
             .uniform_blocks = {
@@ -97,8 +111,21 @@ sg_pipeline init_scene_pipeline(int32_t sample_count) {
         .fs = {
             .images = {
                 [0] = {
-                    .name = "shadow_map",
-                    .image_type = SG_IMAGETYPE_2D
+                    .image_type = SG_IMAGETYPE_2D,
+                    .used = true
+                }
+            },
+            .samplers = {
+                [0] = {
+                    .used = true
+                }
+            },
+            .image_sampler_pairs = {
+                [0] = {
+                    .used = true,
+                    .image_slot = 0,
+                    .sampler_slot = 0,
+                    .glsl_name = "shadow_map"
                 }
             },
             .uniform_blocks = {
@@ -207,9 +234,18 @@ sg_pipeline init_scene_atmos_sun_pipeline(int32_t sample_count) {
                 }
             },
             .images[0] = {
-                .name = "atmos",
+                .used = true,
                 .image_type = SG_IMAGETYPE_2D
-            }
+            },
+            .samplers[0] = {
+                .used = true,
+            },
+            .image_sampler_pairs[0] = {
+                .used = true,
+                .image_slot = 0,
+                .sampler_slot = 0,
+                .glsl_name = "atmos"
+            },
         }
     });
 
@@ -247,6 +283,7 @@ void update_scene_pass(
 {
     pass->color_target = sokol_target_rgba16f(
         "Scene color target", w, h, sample_count, 1);
+    pass->color_sampler = sokol_sampler(1);
     pass->depth_target = sokol_target_depth(w, h, sample_count);
 
     pass->pass = sg_make_pass(&(sg_pass_desc){
@@ -303,7 +340,8 @@ void scene_draw_atmos(
         .vertex_buffers = { 
             [0] = state->resources->quad 
         },
-        .fs_images[0] = state->atmos
+        .fs.images[0] = state->atmos,
+        .fs.samplers[0] = state->atmos_sampler
     };
 
     sg_apply_bindings(&bind);
@@ -314,7 +352,8 @@ static
 void scene_draw_instances(
     SokolGeometry *geometry,
     sokol_geometry_buffers_t *buffers,
-    sg_image shadow_map)
+    sg_image shadow_map,
+    sg_sampler shadow_map_sampler)
 {
     if (!buffers->instance_count) {
         return;
@@ -329,8 +368,10 @@ void scene_draw_instances(
             [SKIN_I] = buffers->skins,
         },
         .index_buffer = geometry->indices,
-        .vs_images[0] = joint_texture(),
-        .fs_images[0] = shadow_map
+        .vs.images[0] = joint_texture(),
+        .vs.samplers[0] = joint_sampler(),
+        .fs.images[0] = shadow_map,
+        .fs.samplers[0] = shadow_map_sampler
     };
 
     sg_apply_bindings(&bind);
@@ -387,8 +428,8 @@ void sokol_run_scene_pass(
 
         int b;
         for (b = 0; b < qit.count; b ++) {
-            scene_draw_instances(&geometry[b], geometry[b].solid, state->shadow_map);
-            scene_draw_instances(&geometry[b], geometry[b].emissive, state->shadow_map);
+            scene_draw_instances(&geometry[b], geometry[b].solid, state->shadow_map, state->shadow_map_sampler);
+            scene_draw_instances(&geometry[b], geometry[b].emissive, state->shadow_map, state->shadow_map_sampler);
         }
     }
     sg_end_pass();

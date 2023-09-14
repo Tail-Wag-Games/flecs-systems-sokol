@@ -328,6 +328,7 @@ void SokolRender(ecs_iter_t *it) {
     state.world = world;
     state.q_scene = q_buffers->query;
     state.shadow_map = r->shadow_pass.color_target;
+    state.shadow_map_sampler = r->shadow_pass.color_sampler;
     state.resources = &r->resources;
 
     const EcsCanvas *canvas = ecs_get(world, r->canvas, EcsCanvas);
@@ -385,29 +386,34 @@ void SokolRender(ecs_iter_t *it) {
     if (state.atmosphere) {
         sokol_run_atmos_pass(&r->atmos_pass, &state);
         state.atmos = r->atmos_pass.color_target;
+        state.atmos_sampler = r->atmos_pass.color_sampler;
     } else {
         state.atmos = r->resources.bg_texture;
+        state.atmos_sampler = r->resources.bg_sampler;
     }
 
     /* Render scene */
     sokol_run_scene_pass(&r->scene_pass, &state);
     sg_image hdr = r->scene_pass.color_target;
+    sg_sampler hdr_sampler = r->scene_pass.color_sampler;
 
     /* Ssao */
-    sg_image ssao = sokol_fx_run(&fx->ssao, 2, (sg_image[]){ 
-        hdr, r->depth_pass.color_target }, 
+    sokol_fx_run_result_t ssao = sokol_fx_run(&fx->ssao, 2, (sg_image[]){ 
+        hdr, r->depth_pass.color_target }, (sg_sampler[]){ 
+        hdr_sampler, r->depth_pass.color_sampler }, 
             &state, 0);
 
     /* Fog */
     const EcsRgb *bg_color = &canvas->background_color;
     sokol_fog_set_params(&fx->fog, canvas->fog_density, 
         bg_color->r, bg_color->g, bg_color->b, state.uniforms.eye_horizon[1]);
-    sg_image scene_with_fog = sokol_fx_run(&fx->fog, 3, (sg_image[]){ 
-        ssao, r->depth_pass.color_target, state.atmos },
+    sokol_fx_run_result_t scene_with_fog = sokol_fx_run(&fx->fog, 3, (sg_image[]){ 
+        ssao.img, r->depth_pass.color_target, state.atmos }, (sg_sampler[]){ 
+        ssao.sampler, r->depth_pass.color_sampler, state.atmos_sampler },
             &state, 0);
 
     /* HDR */
-    sokol_fx_run(&fx->hdr, 1, (sg_image[]){ scene_with_fog },
+    sokol_fx_run(&fx->hdr, 1, (sg_image[]){ scene_with_fog.img }, (sg_sampler[]){ scene_with_fog.sampler },
         &state, &r->screen_pass);
 }
 
@@ -445,6 +451,7 @@ void SokolInitRenderer(ecs_iter_t *it) {
 
     sokol_resources_t resources = sokol_init_resources();
     resources.bg_texture = sokol_bg_texture(canvas->background_color, 2, 2);
+    resources.bg_sampler = sokol_bg_sampler();
 
     sokol_offscreen_pass_t depth_pass;
     sokol_offscreen_pass_t scene_pass = sokol_init_scene_pass(

@@ -15,6 +15,7 @@ typedef struct depth_fs_uniforms_t {
 } depth_fs_uniforms_t;
 
 sg_image joint_texture();
+sg_sampler joint_sampler();
 float joint_pixel_width();
 float joint_texture_u();
 float joint_texture_v();
@@ -131,8 +132,21 @@ sg_pipeline init_depth_pipeline(int32_t sample_count) {
         .vs = {
             .images = {
                 [0] = {
-                    .name = "u_joint_tex",
-                    .image_type = SG_IMAGETYPE_2D
+                    .image_type = SG_IMAGETYPE_2D,
+                    .used = true,
+                }
+            },
+            .samplers = {
+                [0] = {
+                    .used = true
+                }
+            },
+            .image_sampler_pairs = {
+                [0] = {
+                    .used = true,
+                    .image_slot = 0,
+                    .sampler_slot = 0,
+                    .glsl_name = "u_joint_tex"
                 }
             },
             .uniform_blocks = {
@@ -209,6 +223,7 @@ sokol_offscreen_pass_t sokol_init_depth_pass(
 
     sg_image color_target = sokol_target_rgba8(
         "Depth color target", w, h, sample_count);
+    sg_sampler color_sampler = sokol_sampler(1);
     ecs_rgb_t background_color = {1, 1, 1};
 
     return (sokol_offscreen_pass_t){
@@ -219,6 +234,7 @@ sokol_offscreen_pass_t sokol_init_depth_pass(
         }),
         .pip = init_depth_pipeline(sample_count),
         .color_target = color_target,
+        .color_sampler = color_sampler,
         .depth_target = depth_target
     };
 }
@@ -235,6 +251,7 @@ void sokol_update_depth_pass(
 
     pass->color_target = sokol_target_rgba8(
         "Depth color target", w, h, sample_count);
+    pass->color_sampler = sokol_sampler(1);
 
     pass->pass = sg_make_pass(&(sg_pass_desc){
         .color_attachments[0].image = pass->color_target,
@@ -257,7 +274,8 @@ void depth_draw_instances(
             [1] = buffers->transforms
         },
         .index_buffer = geometry->indices,
-        .vs_images[0] = joint_texture()
+        .vs.images[0] = joint_texture(),
+        .vs.samplers[0] = joint_sampler()
     };
 
     sg_apply_bindings(&bind);

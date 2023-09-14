@@ -114,6 +114,31 @@ void compute_flat_normals(
     }
 }
 
+sg_sampler sokol_sampler(
+    int32_t num_mipmaps)
+{
+    sg_sampler_desc sampler_desc;
+
+    if (num_mipmaps > 1) {
+        sampler_desc = (sg_sampler_desc){
+            .wrap_u = SG_WRAP_CLAMP_TO_EDGE,
+            .wrap_v = SG_WRAP_CLAMP_TO_EDGE,
+            .min_filter = SG_FILTER_LINEAR,
+            .mag_filter = SG_FILTER_LINEAR,
+            .mipmap_filter = SG_FILTER_LINEAR,
+        };
+    } else {
+        sampler_desc = (sg_sampler_desc){
+            .wrap_u = SG_WRAP_CLAMP_TO_EDGE,
+            .wrap_v = SG_WRAP_CLAMP_TO_EDGE,
+            .min_filter = SG_FILTER_LINEAR,
+            .mag_filter = SG_FILTER_LINEAR,
+        };
+    }
+
+    return sg_make_sampler(&sampler_desc);
+}
+
 sg_image sokol_target(
     const char *label,
     int32_t width, 
@@ -123,36 +148,16 @@ sg_image sokol_target(
     sg_pixel_format format)
 {
     sg_image_desc img_desc;
-    
-    if (num_mipmaps > 1) {
-        img_desc = (sg_image_desc){
-            .render_target = true,
-            .width = width,
-            .height = height,
-            .wrap_u = SG_WRAP_CLAMP_TO_EDGE,
-            .wrap_v = SG_WRAP_CLAMP_TO_EDGE,
-            .pixel_format = format,
-            .min_filter = SG_FILTER_LINEAR_MIPMAP_LINEAR,
-            .mag_filter = SG_FILTER_LINEAR,
-            .sample_count = sample_count,
-            .num_mipmaps = num_mipmaps,
-            .label = label
-        };
-    } else {
-        img_desc = (sg_image_desc){
-            .render_target = true,
-            .width = width,
-            .height = height,
-            .wrap_u = SG_WRAP_CLAMP_TO_EDGE,
-            .wrap_v = SG_WRAP_CLAMP_TO_EDGE,
-            .pixel_format = format,
-            .min_filter = SG_FILTER_LINEAR,
-            .mag_filter = SG_FILTER_LINEAR,
-            .sample_count = sample_count,
-            .num_mipmaps = num_mipmaps,
-            .label = label
-        };
-    }
+
+    img_desc = (sg_image_desc){
+        .render_target = true,
+        .width = width,
+        .height = height,
+        .pixel_format = format,
+        .sample_count = sample_count,
+        .num_mipmaps = num_mipmaps,
+        .label = label
+    };
 
     return sg_make_image(&img_desc);
 }
@@ -195,8 +200,6 @@ sg_image sokol_target_depth(
         .width = width,
         .height = height,
         .pixel_format = SG_PIXELFORMAT_DEPTH,
-        .min_filter = SG_FILTER_LINEAR,
-        .mag_filter = SG_FILTER_LINEAR,
         .sample_count = sample_count,
         .label = "Depth target"
     };
@@ -312,8 +315,6 @@ sg_image sokol_noise_texture(
     sg_image img = sg_make_image(&(sg_image_desc){
         .width = width,
         .height = height,
-        .wrap_u = SG_WRAP_REPEAT,
-        .wrap_v = SG_WRAP_REPEAT,
         .pixel_format = SG_PIXELFORMAT_R8,
         .label = "Noise texture",
         .data.subimage[0][0] = {
@@ -345,8 +346,6 @@ sg_image sokol_bg_texture(ecs_rgb_t color, int32_t width, int32_t height)
     sg_image img = sg_make_image(&(sg_image_desc){
         .width = width,
         .height = height,
-        .wrap_u = SG_WRAP_CLAMP_TO_EDGE,
-        .wrap_v = SG_WRAP_CLAMP_TO_EDGE,
         .pixel_format = SG_PIXELFORMAT_RGBA8,
         .label = "Background texture",
         .data.subimage[0][0] = {
@@ -356,4 +355,9 @@ sg_image sokol_bg_texture(ecs_rgb_t color, int32_t width, int32_t height)
     });
 
     return img;
+}
+
+sg_sampler sokol_bg_sampler()
+{
+    return sokol_sampler(1);
 }

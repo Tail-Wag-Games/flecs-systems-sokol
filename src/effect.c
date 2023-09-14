@@ -151,8 +151,13 @@ int sokol_fx_add_pass(
             break;
         }
 
-        prog.fs.images[i].name = input;
         prog.fs.images[i].image_type = SG_IMAGETYPE_2D;
+        prog.fs.images[i].used = true;
+        prog.fs.samplers[i].used = true;
+        prog.fs.image_sampler_pairs[i].used = true;
+        prog.fs.image_sampler_pairs[i].image_slot = i;
+        prog.fs.image_sampler_pairs[i].sampler_slot = i;
+        prog.fs.image_sampler_pairs[i].glsl_name = input;
         pass->input_count ++;
     }
 
@@ -244,6 +249,7 @@ int sokol_fx_add_pass(
         pass->outputs[i].out[0] = sokol_target(fx->name, output->width, 
             output->height, pass->sample_count, pass->mipmap_count, 
             color_format);
+        pass->outputs[i].sampler[0] = sokol_sampler(pass->mipmap_count);
         pass->outputs[i].pass[0] = sg_make_pass(&(sg_pass_desc){
             .color_attachments[0].image = pass->outputs[i].out[0]
         });
@@ -265,6 +271,7 @@ int sokol_fx_add_pass(
         if (step_count > 1) {
             pass->outputs[i].out[1] = sokol_target(fx->name, output->width, 
                 output->height, pass->sample_count, pass->mipmap_count, color_format);
+            pass->outputs[i].sampler[1] = sokol_sampler(pass->mipmap_count);
             pass->outputs[i].pass[1] = sg_make_pass(&(sg_pass_desc){
                 .color_attachments[0].image = pass->outputs[i].out[1]
             });
@@ -284,6 +291,7 @@ void fx_draw(
     sokol_render_state_t *state,
     SokolFx *fx,
     sg_image *inputs,
+    sg_sampler *samplers,
     sokol_fx_pass_t *pass,
     sokol_screen_pass_t *screen_pass,
     int32_t width,
@@ -361,7 +369,7 @@ void fx_draw(
         }
 
         sg_bindings bind = { .vertex_buffers = { res->quad } };
-        bind.fs_images[0] = res->noise_texture;
+        bind.fs.images[0] = res->noise_texture;
 
         for (int32_t i = 0; i < pass->input_count; i ++) {
             sokol_fx_input_t input = step->inputs[i];
@@ -373,14 +381,18 @@ void fx_draw(
             if (input.pass == -1) {
                 /* Previous version of current output (for pingponging) */
                 sokol_fx_output_t *io = &pass->outputs[step->output];
-                bind.fs_images[i] = io->out[!io->toggle];
+                bind.fs.images[i] = io->out[!io->toggle];
+                bind.fs.samplers[i] = io->sampler[!io->toggle];
             } else if (SOKOL_FX_IS_PASS(input.pass)) {
                 /* Pass level input */
-                bind.fs_images[i] = fx->pass[input.pass - SOKOL_MAX_FX_INPUTS]
+                bind.fs.images[i] = fx->pass[input.pass - SOKOL_MAX_FX_INPUTS]
                     .outputs[input.index].out[0];
+                bind.fs.samplers[i] = fx->pass[input.pass - SOKOL_MAX_FX_INPUTS]
+                    .outputs[input.index].sampler[0];
             } else {
                 /* Effect level input */
-                bind.fs_images[i] = inputs[input.pass];
+                bind.fs.images[i] = inputs[input.pass];
+                bind.fs.samplers[i] = samplers[input.pass];
             }
         }
 
@@ -394,10 +406,11 @@ void fx_draw(
     }
 }
 
-sg_image sokol_fx_run(
+sokol_fx_run_result_t sokol_fx_run(
     SokolFx *fx,
     int32_t input_count,
     sg_image inputs[],
+    sg_sampler samplers[],
     sokol_render_state_t *state,
     sokol_screen_pass_t *screen_pass)
 {
@@ -410,16 +423,16 @@ sg_image sokol_fx_run(
     /* Run passes */
     if (!screen_pass) {
         for (; i < fx->pass_count; i ++) {
-            fx_draw(state, fx, inputs, &fx->pass[i], NULL, width, height);
+            fx_draw(state, fx, inputs, samplers, &fx->pass[i], NULL, width, height);
         }
     } else {
         for (; i < fx->pass_count - 1; i ++) {
-            fx_draw(state, fx, inputs, &fx->pass[i], NULL, width, height);
+            fx_draw(state, fx, inputs, samplers, &fx->pass[i], NULL, width, height);
         }
-        fx_draw(state, fx, inputs, &fx->pass[i], screen_pass, width, height);
+        fx_draw(state, fx, inputs, samplers, &fx->pass[i], screen_pass, width, height);
     }
 
-    return fx->pass[fx->pass_count - 1].outputs[0].out[0];
+    return (sokol_fx_run_result_t){fx->pass[fx->pass_count - 1].outputs[0].out[0], fx->pass[fx->pass_count - 1].outputs[0].sampler[0]};
 }
 
 void sokol_fx_update_size(
@@ -447,6 +460,7 @@ void sokol_fx_update_size(
             output->out[0] = sokol_target(fx->name, output->width, 
                 output->height, pass->sample_count, pass->mipmap_count, 
                 pass->color_format);
+            output->sampler[0] = sokol_sampler(pass->mipmap_count);
             output->pass[0] = sg_make_pass(&(sg_pass_desc){
                 .color_attachments[0].image = output->out[0]});
 
@@ -456,6 +470,7 @@ void sokol_fx_update_size(
                 output->out[1] = sokol_target(fx->name, output->width, 
                     output->height, pass->sample_count, pass->mipmap_count, 
                     pass->color_format);
+                output->sampler[1] = sokol_sampler(pass->mipmap_count);
                 output->pass[1] = sg_make_pass(&(sg_pass_desc){
                     .color_attachments[0].image = output->out[1]});
             }

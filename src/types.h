@@ -31,6 +31,7 @@ typedef struct sokol_resources_t {
 
     sg_image noise_texture;
     sg_image bg_texture;
+    sg_sampler bg_sampler;
 } sokol_resources_t;
 
 typedef struct sokol_global_uniforms_t {
@@ -84,7 +85,9 @@ typedef struct sokol_render_state_t {
     sokol_resources_t *resources;
     sokol_global_uniforms_t uniforms;
     sg_image atmos;
+    sg_sampler atmos_sampler;
     sg_image shadow_map;
+    sg_sampler shadow_map_sampler;
 } sokol_render_state_t;
 
 typedef struct sokol_offscreen_pass_t {
@@ -93,7 +96,9 @@ typedef struct sokol_offscreen_pass_t {
     sg_pipeline pip;
     sg_pipeline pip_2;
     sg_image depth_target;
+    sg_sampler depth_sampler;
     sg_image color_target;
+    sg_sampler color_sampler;
     int32_t sample_count;
 } sokol_offscreen_pass_t;
 
