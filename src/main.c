@@ -3,7 +3,7 @@
 #endif
 
 #ifndef __APPLE__
-#define SOKOL_IMPL
+// #define SOKOL_IMPL
 #endif
 
 #define SOKOL_NO_ENTRY
@@ -199,105 +199,108 @@ ecs_entity_t sokol_get_canvas(const ecs_world_t *world) {
     return result;
 }
 
-static
-void sokol_input_action(const sapp_event* evt, sokol_app_ctx_t *ctx) {
-    ecs_world_t *world = ctx->world;
-    EcsInput *input = ecs_singleton_get_mut(world, EcsInput);
+// static
+// void sokol_input_action(const sapp_event* evt, sokol_app_ctx_t *ctx) {
+//     ecs_world_t *world = ctx->world;
+//     EcsInput *input = ecs_singleton_get_mut(world, EcsInput);
 
-    switch (evt->type) {
-    case SAPP_EVENTTYPE_MOUSE_DOWN:
-        if (evt->mouse_button == SAPP_MOUSEBUTTON_LEFT)
-            mouse_down(&input->mouse.left);
+//     switch (evt->type) {
+//     case SAPP_EVENTTYPE_MOUSE_DOWN:
+//         if (evt->mouse_button == SAPP_MOUSEBUTTON_LEFT)
+//             mouse_down(&input->mouse.left);
         
-        if (evt->mouse_button == SAPP_MOUSEBUTTON_RIGHT)
-            mouse_down(&input->mouse.right);
-        break;
-    case SAPP_EVENTTYPE_MOUSE_UP:
-        if (evt->mouse_button == SAPP_MOUSEBUTTON_LEFT)
-            mouse_up(&input->mouse.left);
+//         if (evt->mouse_button == SAPP_MOUSEBUTTON_RIGHT)
+//             mouse_down(&input->mouse.right);
+//         break;
+//     case SAPP_EVENTTYPE_MOUSE_UP:
+//         if (evt->mouse_button == SAPP_MOUSEBUTTON_LEFT)
+//             mouse_up(&input->mouse.left);
         
-        if (evt->mouse_button == SAPP_MOUSEBUTTON_RIGHT)
-            mouse_up(&input->mouse.right);
-        break;
-    case SAPP_EVENTTYPE_MOUSE_SCROLL:
-        break;
-    case SAPP_EVENTTYPE_KEY_UP:
-        key_up(key_get(input, key_code(evt->key_code)));
-        break;
-    case SAPP_EVENTTYPE_KEY_DOWN:
-        key_down(key_get(input, key_code(evt->key_code)));
-        break;
-    case SAPP_EVENTTYPE_RESIZED: {
-        break;
-    }
-    default:
-        break;
-    }
-}
+//         if (evt->mouse_button == SAPP_MOUSEBUTTON_RIGHT)
+//             mouse_up(&input->mouse.right);
+//         break;
+//     case SAPP_EVENTTYPE_MOUSE_SCROLL:
+//         break;
+//     case SAPP_EVENTTYPE_KEY_UP:
+//         key_up(key_get(input, key_code(evt->key_code)));
+//         break;
+//     case SAPP_EVENTTYPE_KEY_DOWN:
+//         key_down(key_get(input, key_code(evt->key_code)));
+//         break;
+//     case SAPP_EVENTTYPE_RESIZED: {
+//         break;
+//     }
+//     default:
+//         break;
+//     }
+// }
 
-static
-void sokol_frame_action(sokol_app_ctx_t *ctx) {
-    if (ecs_should_quit(ctx->world)) {
-        sapp_quit();
-    }
+// static
+// void sokol_frame_action(sokol_app_ctx_t *ctx) {
+//     if (ecs_should_quit(ctx->world)) {
+//         sapp_quit();
+//     }
 
-    ecs_app_run_frame(ctx->world, ctx->desc);
+//     ecs_app_run_frame(ctx->world, ctx->desc);
 
-    /* Reset input buffer */
-    EcsInput *input = ecs_singleton_get_mut(ctx->world, EcsInput);
-    keys_reset(input);
-    mouse_reset(input);
-}
+//     /* Reset input buffer */
+//     EcsInput *input = ecs_singleton_get_mut(ctx->world, EcsInput);
+//     keys_reset(input);
+//     mouse_reset(input);
+// }
 
-static
-sokol_app_ctx_t sokol_app_ctx;
+// static
+// sokol_app_ctx_t sokol_app_ctx;
 
-static
-int sokol_run_action(
-    ecs_world_t *world,
-    ecs_app_desc_t *desc)
-{    
-    sokol_app_ctx = (sokol_app_ctx_t){
-        .world = world,
-        .desc = desc
-    };
+// static
+// int sokol_run_action(
+//     ecs_world_t *world,
+//     ecs_app_desc_t *desc)
+// {   
+//     if (desc->init) {
+//         desc->init(world);
+//     }
+     
+//     sokol_app_ctx = (sokol_app_ctx_t){
+//         .world = world,
+//         .desc = desc
+//     };
 
-    int width = 800, height = 600;
-    const char *title = "Flecs App";
+//     int width = 800, height = 600;
+//     const char *title = "Flecs App";
 
-    /* Find canvas instance for width, height & title */
-    ecs_entity_t canvas = sokol_get_canvas(world);
-    if (canvas) {
-        const EcsCanvas *canvas_data = ecs_get(world, canvas, EcsCanvas);
-        width = canvas_data->width;
-        height = canvas_data->height;
-    }
+//     /* Find canvas instance for width, height & title */
+//     ecs_entity_t canvas = sokol_get_canvas(world);
+//     if (canvas) {
+//         const EcsCanvas *canvas_data = ecs_get(world, canvas, EcsCanvas);
+//         width = canvas_data->width;
+//         height = canvas_data->height;
+//     }
 
-    bool high_dpi = true;
-#ifdef __EMSCRIPTEN__
-    high_dpi = false; /* high dpi doesn't work on mobile browsers */
-#endif
+//     bool high_dpi = true;
+// #ifdef __EMSCRIPTEN__
+//     high_dpi = false; /* high dpi doesn't work on mobile browsers */
+// #endif
 
-    /* Initialize input component */
-    ecs_singleton_set(world, EcsInput, { 0 });
+//     /* Initialize input component */
+//     ecs_singleton_set(world, EcsInput, { 0 });
 
-    ecs_trace("sokol: starting app '%s'", title);
+//     ecs_trace("sokol: starting app '%s'", title);
 
-    /* Run app */
-    sapp_run(&(sapp_desc) {
-        .frame_userdata_cb = (void(*)(void*))sokol_frame_action,
-        .event_userdata_cb = (void(*)(const sapp_event*, void*))sokol_input_action,
-        .user_data = &sokol_app_ctx,
-        .window_title = title,
-        .width = width,
-        .height = height,
-        .sample_count = 1,
-        .high_dpi = high_dpi,
-        .gl_force_gles2 = false
-    });
+//     /* Run app */
+//     sapp_run(&(sapp_desc) {
+//         .frame_userdata_cb = (void(*)(void*))sokol_frame_action,
+//         .event_userdata_cb = (void(*)(const sapp_event*, void*))sokol_input_action,
+//         .user_data = &sokol_app_ctx,
+//         .window_title = title,
+//         .width = width,
+//         .height = height,
+//         .sample_count = 1,
+//         .high_dpi = high_dpi
+//     });
 
-    return 0;
-}
+//     return 0;
+// }
 
 void FlecsSystemsSokolImport(
     ecs_world_t *world)
@@ -315,5 +318,5 @@ void FlecsSystemsSokolImport(
     ECS_IMPORT(world, FlecsSystemsSokolRenderer);
     ECS_IMPORT(world, FlecsSystemsSokolGeometry);
 
-    ecs_app_set_run_action(sokol_run_action);
+    // ecs_app_set_run_action(sokol_run_action);
 }

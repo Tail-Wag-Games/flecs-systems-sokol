@@ -18,6 +18,8 @@ typedef struct sokol_geometry_page_t {
     ecs_rgb_t *colors;
     mat4 *transforms;
     SokolMaterial *materials;
+    sokol_skin_t *skins;
+    
 
     /* Number of instances in page */
     int32_t count;
@@ -87,11 +89,13 @@ typedef struct sokol_geometry_buffers_t {
     ecs_vec_t colors_data;
     ecs_vec_t transforms_data;
     ecs_vec_t materials_data;
+    ecs_vec_t skins_data;
 
     /* Sokol buffers with instanced data */
     sg_buffer colors;
     sg_buffer transforms;
     sg_buffer materials;
+    sg_buffer skins;
 
     /* Number of instances */
     int32_t instance_count;
@@ -100,10 +104,16 @@ typedef struct sokol_geometry_buffers_t {
     ecs_allocator_t allocator;
 } sokol_geometry_buffers_t;
 
+typedef struct sokol_geometry_vertex_t {
+    float position[3];
+    uint32_t normal;
+    uint32_t joint_indices;
+    uint32_t joint_weights;
+} sokol_geometry_vertex_t;
+
 typedef struct SokolGeometry {
     /* GPU buffers with static geometry data */
     sg_buffer vertices;
-    sg_buffer normals;
     sg_buffer indices;
 
     /* Number of indices */

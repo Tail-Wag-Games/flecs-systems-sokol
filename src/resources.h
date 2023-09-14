@@ -46,15 +46,11 @@ sg_buffer sokol_buffer_box_indices(void);
 
 int32_t sokol_box_index_count(void);
 
-sg_buffer sokol_buffer_box_normals(void);
-
 sg_buffer sokol_buffer_rectangle(void);
 
 sg_buffer sokol_buffer_rectangle_indices(void);
 
 int32_t sokol_rectangle_index_count(void);
-
-sg_buffer sokol_buffer_rectangle_normals(void);
 
 sg_pass_action sokol_clear_action(
     ecs_rgb_t color,

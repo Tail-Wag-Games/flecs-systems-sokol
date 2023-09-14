@@ -1,11 +1,18 @@
 #include "geometry.h"
 #include "../materials/materials.h"
 
+ECS_SYSTEM_DECLARE(SokolPopulateGeometry);
+
 ECS_COMPONENT_DECLARE(SokolGeometry);
 ECS_COMPONENT_DECLARE(SokolGeometryQuery);
 
 ECS_DECLARE(SokolRectangleGeometry);
 ECS_DECLARE(SokolBoxGeometry);
+ECS_DECLARE(SokolMeshGeometry);
+
+sg_buffer mesh_vertices();
+sg_buffer mesh_indices();
+int32_t mesh_index_count();
 
 // Holds a linked list of buffers for geometry (box, rectangle)
 static
@@ -18,6 +25,8 @@ sokol_geometry_buffers_t* sokol_create_buffers(void) {
     ecs_vec_init_t(&result->allocator, &result->colors_data, ecs_rgb_t, 0);
     ecs_vec_init_t(&result->allocator, &result->transforms_data, mat4, 0);
     ecs_vec_init_t(&result->allocator, &result->materials_data, SokolMaterial, 0);
+    ecs_vec_init_t(&result->allocator, &result->skins_data, sokol_skin_t, 0);
+
 
     return result;
 }
@@ -31,10 +40,12 @@ void sokol_delete_buffers(sokol_geometry_buffers_t* result) {
     sg_destroy_buffer(result->colors);
     sg_destroy_buffer(result->transforms);
     sg_destroy_buffer(result->materials);
+    sg_destroy_buffer(result->skins);
 
     ecs_vec_fini_t(&result->allocator, &result->colors_data, ecs_rgb_t);
     ecs_vec_fini_t(&result->allocator, &result->transforms_data, mat4);
     ecs_vec_fini_t(&result->allocator, &result->materials_data, SokolMaterial);
+    ecs_vec_fini_t(&result->allocator, &result->skins_data, sokol_skin_t);
     flecs_allocator_fini(&result->allocator);
 
     ecs_os_free(result);
@@ -175,6 +186,39 @@ void sokol_populate_box(
     }
 }
 
+// To ensure boxes are of the right size, use the Box component to apply
+// a scaling factor to the transform matrix that is sent to the GPU.
+static
+void sokol_populate_mesh(
+    mat4 *transforms, 
+    EcsBox *data, 
+    int32_t count,
+    bool self)
+     
+{    
+    int i;
+    vec3 zero = {0.0f, 0.0f, -50.0f};
+    if (self) {
+        vec3 scale = {25.0f, 25.0f, 25.0f};
+        for (i = 0; i < count; i ++) {
+            // glm_mat4_identity(transforms[i]);
+            glm_translate(transforms[i], zero);
+            // glm_rotate(transforms[i], zero);
+            glm_scale(transforms[i], scale);
+            // glm_mat4_transpose(transforms[i]);
+        }
+    } else {
+        vec3 scale = {25.0f, 25.0f, 25.0f};
+        for (i = 0; i < count; i ++) {
+            // glm_mat4_identity(transforms[i]);
+            glm_translate(transforms[i], zero);
+            // glm_rotate(transforms[i], zero);
+            glm_scale(transforms[i], scale);
+            // glm_mat4_transpose(transforms[i]);
+        }
+    }
+}
+
 // Init static rectangle geometry data (vertices, indices)
 static
 void sokol_init_rectangle(
@@ -186,7 +230,6 @@ void sokol_init_rectangle(
     ecs_assert(g != NULL, ECS_INTERNAL_ERROR, NULL);
 
     g->vertices = resources->rect;
-    g->normals = resources->rect_normals;
     g->indices = resources->rect_indices;
     g->index_count = sokol_rectangle_index_count();
     g->populate = (sokol_geometry_action_t)sokol_populate_rectangle;
@@ -204,10 +247,26 @@ void sokol_init_box(
         ecs_assert(g != NULL, ECS_INTERNAL_ERROR, NULL);
 
         g->vertices = resources->box;
-        g->normals = resources->box_normals;
         g->indices = resources->box_indices;
         g->index_count = sokol_box_index_count();
         g->populate = (sokol_geometry_action_t)sokol_populate_box;
+    }
+}
+
+// Init static box geometry data (vertices, indices)
+static
+void sokol_init_mesh(
+    ecs_world_t *world) 
+{
+    if (SokolMeshGeometry) {
+        SokolGeometry *g = ecs_get_mut(
+            world, ecs_id(SokolMeshGeometry), SokolGeometry);
+        ecs_assert(g != NULL, ECS_INTERNAL_ERROR, NULL);
+
+        g->vertices = mesh_vertices();
+        g->indices = mesh_indices();
+        g->index_count = mesh_index_count();
+        g->populate = (sokol_geometry_action_t)sokol_populate_mesh;
     }
 }
 
@@ -217,6 +276,7 @@ void sokol_init_geometry(
 {
     sokol_init_rectangle(world, resources);
     sokol_init_box(world, resources);
+    sokol_init_mesh(world);
 }
 
 // Clear list of group ids that got changed in this frame
@@ -258,6 +318,7 @@ sokol_geometry_page_t* sokol_group_add_page(
     page->colors = ecs_os_calloc_n(ecs_rgb_t, SOKOL_GEOMETRY_PAGE_SIZE);
     page->transforms = ecs_os_calloc_n(mat4, SOKOL_GEOMETRY_PAGE_SIZE);
     page->materials = ecs_os_calloc_n(SokolMaterial, SOKOL_GEOMETRY_PAGE_SIZE);
+    page->skins = ecs_os_calloc_n(sokol_skin_t, SOKOL_GEOMETRY_PAGE_SIZE);
 
     if (!group->first_page) {
         ecs_assert(!group->last_page, ECS_INTERNAL_ERROR, NULL);
@@ -473,10 +534,13 @@ void sokol_update_group(
         EcsTransform3 *transforms = ecs_field(&qit, EcsTransform3, 1);
         EcsRgb *colors = ecs_field(&qit, EcsRgb, 2);
         SokolMaterialId *materials = ecs_field(&qit, SokolMaterialId, 3);
-        void *geometry_data = ecs_field_w_size(&qit, 0, 4);
-        bool geometry_self = ecs_field_is_self(&qit, 4);
-        ecs_size_t geometry_size = ecs_field_size(&qit, 4);
+        SokolSkin *skins = ecs_field(&qit, SokolSkin, 4);
+            
+        void *geometry_data = ecs_field_w_size(&qit, 0, 5);
+        bool geometry_self = ecs_field_is_self(&qit, 5);
+        ecs_size_t geometry_size = ecs_field_size(&qit, 5);
 
+        
         int32_t remaining = qit.count;
         group->count += qit.count;
 
@@ -534,6 +598,21 @@ void sokol_update_group(
                     SokolMaterial, to_copy);
             }
 
+            // Copy skins data
+            if (skins) {
+                if (ecs_field_is_self(&qit, 4)) {
+                    ecs_os_memcpy_n(&page->skins[pstart], skins, sokol_skin_t, to_copy);
+                    skins += to_copy;
+                } else {
+                    // Shared color component, copy shared value to all elements
+                    for (i = 0; i < to_copy; i ++) {
+                        page->skins[pstart + i] = *skins;
+                    }
+                }
+            }
+
+            
+
             // Apply geometry-specific scaling to transform matrix
             geometry->populate(&page->transforms[pstart], geometry_data, 
                 to_copy, geometry_self);
@@ -570,6 +649,7 @@ void sokol_update_buffer(
     ecs_vec_t *colors_data = &buffers->colors_data;
     ecs_vec_t *transforms_data = &buffers->transforms_data;
     ecs_vec_t *materials_data = &buffers->materials_data;
+    ecs_vec_t *skins_data = &buffers->skins_data;
 
     // Copy data from groups to temporary buffers before copying to sokol buffers
     sokol_geometry_group_t *group = buffer->groups;
@@ -594,6 +674,8 @@ void sokol_update_buffer(
                 page->transforms, mat4, count);
             ecs_os_memcpy_n( ecs_vec_grow_t(a, materials_data, SokolMaterial, count),
                 page->materials, SokolMaterial, count);
+            ecs_os_memcpy_n( ecs_vec_grow_t(a, skins_data, sokol_skin_t, count),
+                page->skins, sokol_skin_t, count);
 
             group_count += count;
             page = page->next;
@@ -680,6 +762,7 @@ void sokol_populate_buffers(
         ecs_vec_reset_t(a, &buffers->colors_data, ecs_rgb_t);
         ecs_vec_reset_t(a, &buffers->transforms_data, mat4);
         ecs_vec_reset_t(a, &buffers->materials_data, SokolMaterial);
+        ecs_vec_reset_t(a, &buffers->skins_data, sokol_skin_t);
 
         sokol_geometry_buffer_t *buffer = buffers->first;
         while (buffer) {
@@ -696,6 +779,7 @@ void sokol_populate_buffers(
                 sg_destroy_buffer(buffers->colors);
                 sg_destroy_buffer(buffers->transforms);
                 sg_destroy_buffer(buffers->materials);
+                sg_destroy_buffer(buffers->skins);
             }
 
             buffers->colors = sg_make_buffer(&(sg_buffer_desc){
@@ -704,6 +788,8 @@ void sokol_populate_buffers(
                 .size = new_size * sizeof(EcsTransform3), .usage = SG_USAGE_STREAM });
             buffers->materials = sg_make_buffer(&(sg_buffer_desc){
                 .size = new_size * sizeof(SokolMaterial), .usage = SG_USAGE_STREAM });
+            buffers->skins = sg_make_buffer(&(sg_buffer_desc){
+                .size = new_size * sizeof(sokol_skin_t), .usage = SG_USAGE_STREAM });
         }
 
         buffers->instance_count = ecs_vec_count(&buffers->colors_data);
@@ -718,6 +804,9 @@ void sokol_populate_buffers(
             sg_update_buffer(buffers->materials, &(sg_range) {
                 ecs_vec_first_t(&buffers->materials_data, SokolMaterial), 
                     buffers->instance_count * sizeof(SokolMaterial) } );
+            sg_update_buffer(buffers->skins, &(sg_range) {
+                ecs_vec_first_t(&buffers->skins_data, sokol_skin_t), 
+                    buffers->instance_count * sizeof(sokol_skin_t) } );
         }
     }
 }
@@ -735,9 +824,9 @@ void SokolPopulateGeometry(
     const EcsPosition3 *view_pos = NULL;
     ecs_world_t *world = it->real_world;
     const SokolRenderer *r = ecs_get(world, SokolRendererInst, SokolRenderer);
-    ecs_entity_t camera = r->camera;
-    if (camera) {
-        view_pos = ecs_get(world, camera, EcsPosition3);
+    
+    if (r && r->camera) {
+        view_pos = ecs_get(world, r->camera, EcsPosition3);
     } else {
         // Wait until renderer has populated camera field
         return;
@@ -834,6 +923,7 @@ void sokol_on_group_delete(
         ecs_os_free(page->colors);
         ecs_os_free(page->transforms);
         ecs_os_free(page->materials);
+        ecs_os_free(page->skins);
         ecs_os_free(page);
         page = next_page;
     }
@@ -916,6 +1006,12 @@ void CreateGeometryQueries(ecs_iter_t *it) {
                     .inout     = EcsIn,
                     .src.flags = EcsUp
                 }, {
+                    .id        = ecs_id(SokolSkin),
+                    .oper      = EcsOptional,
+                    .inout     = EcsIn,
+                    .src.flags = EcsUp
+                }, {
+                
                     .id        = gq[i].component, 
                     .inout     = EcsIn 
                 }, {
@@ -940,6 +1036,8 @@ void CreateGeometryQueries(ecs_iter_t *it) {
         desc.filter.terms[4].oper = 0; /* Remove Not operator */
         gq[i].emissive = ecs_query_init(world, &desc);
     }
+
+    printf("finished creating geometry queries\n");
 }
 
 void FlecsSystemsSokolGeometryImport(
@@ -981,8 +1079,13 @@ void FlecsSystemsSokolGeometryImport(
         ecs_set(world, SokolBoxGeometry, SokolGeometryQuery, {
             .component = ecs_id(EcsBox)
         });
+    
+    ECS_ENTITY_DEFINE(world, SokolMeshGeometry, Geometry);
+        ecs_set(world, SokolMeshGeometry, SokolGeometryQuery, {
+            .component = ecs_id(EcsMesh)
+        });
 
     /* Create system that manages buffers */
-    ECS_SYSTEM(world, SokolPopulateGeometry, EcsPreStore, 
+    ECS_SYSTEM_DEFINE(world, SokolPopulateGeometry, 0, 
         Geometry, [in] GeometryQuery, [in] flecs.game.WorldCell(0, *));
 }

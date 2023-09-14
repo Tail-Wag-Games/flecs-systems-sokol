@@ -1,6 +1,8 @@
 #include "../../private_api.h"
 #include "math.h"
 
+ECS_SYSTEM_DECLARE(SokolRender);
+ECS_SYSTEM_DECLARE(SokolCommit);
 ECS_COMPONENT_DECLARE(SokolRenderer);
 
 /* Static geometry/texture resources */
@@ -11,11 +13,9 @@ sokol_resources_t sokol_init_resources(void) {
 
         .rect = sokol_buffer_rectangle(),
         .rect_indices = sokol_buffer_rectangle_indices(),
-        .rect_normals = sokol_buffer_rectangle_normals(),
 
         .box = sokol_buffer_box(),
         .box_indices = sokol_buffer_box_indices(),
-        .box_normals = sokol_buffer_box_normals(),
 
         .noise_texture = sokol_noise_texture(16, 16)
     };
@@ -416,6 +416,8 @@ void SokolCommit(ecs_iter_t *it) {
     sg_commit();
 }
 
+void sokol_init_meshes(ecs_world_t *w);
+
 /* Initialize renderer & resources */
 static
 void SokolInitRenderer(ecs_iter_t *it) {
@@ -432,11 +434,11 @@ void SokolInitRenderer(ecs_iter_t *it) {
     int w = sapp_width();
     int h = sapp_height();
 
-    sg_setup(&(sg_desc) {
-        .context.depth_format = SG_PIXELFORMAT_NONE,
-        .buffer_pool_size = 16384,
-        .logger = { slog_func }
-    });
+    // sg_setup(&(sg_desc) {
+    //     .context.depth_format = SG_PIXELFORMAT_NONE,
+    //     .buffer_pool_size = 16384,
+    //     .logger.func = slog_func,
+    // });
 
     assert(sg_isvalid());
     ecs_trace("sokol: library initialized");
@@ -470,6 +472,9 @@ void SokolInitRenderer(ecs_iter_t *it) {
 
     sokol_init_geometry(world, &resources);
     ecs_trace("sokol: static geometry resources initialized");
+
+    // sokol_init_meshes(world);
+    // ecs_trace("sokol: mesh resources initialized");
 
     ecs_log_pop();
 }
@@ -515,10 +520,10 @@ void FlecsSystemsSokolRendererImport(
         flecs.systems.sokol.Renderer);
 
     /* System that orchestrates the render tasks */
-    ECS_SYSTEM(world, SokolRender, EcsOnStore, 
+    ECS_SYSTEM_DEFINE(world, SokolRender, 0, 
         flecs.systems.sokol.Renderer,
         (sokol.Query, Geometry));
 
     /* System that calls sg_commit */
-    ECS_SYSTEM(world, SokolCommit, EcsOnStore, 0);
+    ECS_SYSTEM_DEFINE(world, SokolCommit, 0, 0);
 }

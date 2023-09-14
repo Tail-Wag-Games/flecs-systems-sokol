@@ -2,7 +2,7 @@
 #define FLECS_SYSTEMS_SOKOL_TYPES_H
 
 #include <flecs_systems_sokol.h>
-#include "sokol/sokol.h"
+#include "./sokol/sokol.h"
 
 #define SOKOL_MAX_FX_STEPS (8)
 #define SOKOL_MAX_FX_INPUTS (8)
@@ -25,11 +25,9 @@ typedef struct sokol_resources_t {
 
     sg_buffer rect;
     sg_buffer rect_indices;
-    sg_buffer rect_normals;
 
     sg_buffer box;
     sg_buffer box_indices;
-    sg_buffer box_normals;
 
     sg_image noise_texture;
     sg_image bg_texture;

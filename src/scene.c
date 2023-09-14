@@ -4,8 +4,8 @@ typedef struct scene_vs_uniforms_t {
     mat4 mat_v;
     mat4 mat_vp;
     mat4 light_mat_vp;
-    float near_;
-    float far_;
+    vec2 joint_uv;
+    float joint_pixel_width;
 } scene_vs_uniforms_t;
 
 typedef struct scene_fs_uniforms_t {
@@ -25,25 +25,44 @@ typedef struct scene_fs_sun_atmos_uniforms_t {
     float sun_intensity;
 } scene_fs_sun_atmos_uniforms_t;
 
-#define POSITION_I 0
-#define NORMAL_I 1
-#define COLOR_I 2
-#define MATERIAL_I 3
-#define TRANSFORM_I 4
+sg_image joint_texture();
+float joint_pixel_width();
+float joint_texture_u();
+float joint_texture_v();
+
+#define VERTEX_I 0
+#define COLOR_I 1
+#define MATERIAL_I 2
+#define TRANSFORM_I 3
+#define SKIN_I 4
+
+#define VERTEX_ATTR_I 0
+#define COLOR_ATTR_I 4
+#define MATERIAL_ATTR_I 5
+#define TRANSFORM_ATTR_I 6
+#define SKIN_ATTR_I 10
+
 #define LAYOUT_I_STR(i) #i
 #define LAYOUT(loc) "layout(location=" LAYOUT_I_STR(loc) ") "
 
 sg_pipeline init_scene_pipeline(int32_t sample_count) {
     char *vs = sokol_shader_from_str(
         SOKOL_SHADER_HEADER
+        "uniform sampler2D u_joint_tex;\n"
+
         "uniform mat4 u_mat_vp;\n"
         "uniform mat4 u_mat_v;\n"
         "uniform mat4 u_light_vp;\n"
-        LAYOUT(POSITION_I)  "in vec3 v_position;\n"
-        LAYOUT(NORMAL_I)    "in vec3 v_normal;\n"
-        LAYOUT(COLOR_I)     "in vec3 i_color;\n"
-        LAYOUT(MATERIAL_I)  "in vec3 i_material;\n"
-        LAYOUT(TRANSFORM_I) "in mat4 i_mat_m;\n"
+        "uniform vec2 u_joint_uv;\n"
+        "uniform float u_joint_pixel_width;\n"
+
+        "in vec4 v_position;\n"
+        "in vec3 v_normal;\n"
+        "in vec4 jindices;\n"
+        "in vec4 jweights;\n"
+        "in vec3 i_color;\n"
+        "in vec3 i_material;\n"
+        "in mat4 i_mat_m;\n"
         "#include \"etc/sokol/shaders/scene_vert.glsl\"\n"
     );
 
@@ -54,17 +73,25 @@ sg_pipeline init_scene_pipeline(int32_t sample_count) {
 
     /* create an instancing shader */
     sg_shader shd = sg_make_shader(&(sg_shader_desc){
-        .vs.uniform_blocks = {
-            [0] = {
-                .size = sizeof(scene_vs_uniforms_t),
-                .uniforms = {
-                    [0] = { .name="u_mat_v", .type=SG_UNIFORMTYPE_MAT4 },
-                    [1] = { .name="u_mat_vp", .type=SG_UNIFORMTYPE_MAT4 },
-                    [2] = { .name="u_light_vp", .type=SG_UNIFORMTYPE_MAT4 },
-                    [3] = { .name="padding", .type=SG_UNIFORMTYPE_FLOAT2 },
-                    [4] = { .name="u_near", .type=SG_UNIFORMTYPE_FLOAT },
-                    [5] = { .name="u_far", .type=SG_UNIFORMTYPE_FLOAT }
-                },
+        .vs = {
+            .images = {
+                [0] = {
+                    .name = "u_joint_tex",
+                    .image_type = SG_IMAGETYPE_2D
+                }
+            },
+            .uniform_blocks = {
+                [0] = {
+                    .size = sizeof(scene_vs_uniforms_t),
+                    .uniforms = {
+                        [0] = { .name="u_mat_v", .type=SG_UNIFORMTYPE_MAT4 },
+                        [1] = { .name="u_mat_vp", .type=SG_UNIFORMTYPE_MAT4 },
+                        [2] = { .name="u_light_vp", .type=SG_UNIFORMTYPE_MAT4 },
+                        [3] = { .name="u_joint_uv", .type=SG_UNIFORMTYPE_FLOAT2 },
+                        [4] = { .name="u_joint_pixel_width", .type=SG_UNIFORMTYPE_FLOAT},
+                        [5] = { .name="padding", .type=SG_UNIFORMTYPE_FLOAT}
+                    },
+                }
             }
         },
         .fs = {
@@ -101,27 +128,33 @@ sg_pipeline init_scene_pipeline(int32_t sample_count) {
         .index_type = SG_INDEXTYPE_UINT16,
         .layout = {
             .buffers = {
+                [VERTEX_I] =    { .stride = sizeof(sokol_geometry_vertex_t) },
                 [COLOR_I] =     { .stride = 12, .step_func=SG_VERTEXSTEP_PER_INSTANCE },
                 [MATERIAL_I] =  { .stride = 12, .step_func=SG_VERTEXSTEP_PER_INSTANCE },
-                [TRANSFORM_I] = { .stride = 64, .step_func=SG_VERTEXSTEP_PER_INSTANCE }
+                [TRANSFORM_I] = { .stride = 64, .step_func=SG_VERTEXSTEP_PER_INSTANCE },
+                [SKIN_I] = { .stride = sizeof(sokol_skin_t), .step_func=SG_VERTEXSTEP_PER_INSTANCE }
             },
 
             .attrs = {
                 /* Static geometry */
-                [POSITION_I] =      { .buffer_index=POSITION_I, .offset=0,  .format=SG_VERTEXFORMAT_FLOAT3 },
-                [NORMAL_I] =        { .buffer_index=NORMAL_I, .offset=0,  .format=SG_VERTEXFORMAT_FLOAT3 },
+                [VERTEX_ATTR_I] =      { .buffer_index=VERTEX_I, .format=SG_VERTEXFORMAT_FLOAT3, .offset=offsetof(sokol_geometry_vertex_t, position) },
+                [VERTEX_ATTR_I + 1] =        { .buffer_index=VERTEX_I, .format=SG_VERTEXFORMAT_BYTE4N, .offset=offsetof(sokol_geometry_vertex_t, normal)},
+                [VERTEX_ATTR_I + 2] =        { .buffer_index=VERTEX_I, .format=SG_VERTEXFORMAT_UBYTE4N, .offset=offsetof(sokol_geometry_vertex_t, joint_indices)},
+                [VERTEX_ATTR_I + 3] =        { .buffer_index=VERTEX_I, .format=SG_VERTEXFORMAT_UBYTE4N, .offset=offsetof(sokol_geometry_vertex_t, joint_weights)},
 
                 /* Color buffer (per instance) */
-                [COLOR_I] =         { .buffer_index=COLOR_I, .offset=0, .format=SG_VERTEXFORMAT_FLOAT3 },
+                [COLOR_ATTR_I] =         { .buffer_index=COLOR_I, .offset=0, .format=SG_VERTEXFORMAT_FLOAT3 },
 
                 /* Material buffer (per instance) */
-                [MATERIAL_I] =      { .buffer_index=MATERIAL_I, .offset=0, .format=SG_VERTEXFORMAT_FLOAT3 },
+                [MATERIAL_ATTR_I] =      { .buffer_index=MATERIAL_I, .offset=0, .format=SG_VERTEXFORMAT_FLOAT3 },
 
                 /* Matrix (per instance) */
-                [TRANSFORM_I] =     { .buffer_index=TRANSFORM_I, .offset=0,  .format=SG_VERTEXFORMAT_FLOAT4 },
-                [TRANSFORM_I + 1] = { .buffer_index=TRANSFORM_I, .offset=16, .format=SG_VERTEXFORMAT_FLOAT4 },
-                [TRANSFORM_I + 2] = { .buffer_index=TRANSFORM_I, .offset=32, .format=SG_VERTEXFORMAT_FLOAT4 },
-                [TRANSFORM_I + 3] = { .buffer_index=TRANSFORM_I, .offset=48, .format=SG_VERTEXFORMAT_FLOAT4 }
+                [TRANSFORM_ATTR_I] =     { .buffer_index=TRANSFORM_I, .offset=0,  .format=SG_VERTEXFORMAT_FLOAT4 },
+                [TRANSFORM_ATTR_I + 1] = { .buffer_index=TRANSFORM_I, .offset=16, .format=SG_VERTEXFORMAT_FLOAT4 },
+                [TRANSFORM_ATTR_I + 2] = { .buffer_index=TRANSFORM_I, .offset=32, .format=SG_VERTEXFORMAT_FLOAT4 },
+                [TRANSFORM_ATTR_I + 3] = { .buffer_index=TRANSFORM_I, .offset=48, .format=SG_VERTEXFORMAT_FLOAT4 },
+
+                [SKIN_ATTR_I] = { .buffer_index=SKIN_I, .offset=48, .format=SG_VERTEXFORMAT_FLOAT2 }
             }
         },
 
@@ -135,6 +168,7 @@ sg_pipeline init_scene_pipeline(int32_t sample_count) {
             .pixel_format = SG_PIXELFORMAT_RGBA16F
         }},
 
+        .face_winding = SG_FACEWINDING_CCW,
         .cull_mode = SG_CULLMODE_BACK,
         .sample_count = sample_count
     });
@@ -149,8 +183,8 @@ sg_pipeline init_scene_atmos_sun_pipeline(int32_t sample_count) {
     sg_shader shd = sg_make_shader(&(sg_shader_desc){
         .vs.source = 
              SOKOL_SHADER_HEADER
-            "layout(location=0) in vec4 v_position;\n"
-            "layout(location=1) in vec2 v_uv;\n"
+            "in vec4 v_position;\n"
+            "in vec2 v_uv;\n"
             "out vec2 uv;\n"
             "void main() {\n"
             "  gl_Position = v_position;\n"
@@ -288,13 +322,14 @@ void scene_draw_instances(
 
     sg_bindings bind = {
         .vertex_buffers = {
-            [POSITION_I] =  geometry->vertices,
-            [NORMAL_I] =    geometry->normals,
+            [VERTEX_I] =  geometry->vertices,
             [COLOR_I] =     buffers->colors,
             [MATERIAL_I] =  buffers->materials,
-            [TRANSFORM_I] = buffers->transforms
+            [TRANSFORM_I] = buffers->transforms,
+            [SKIN_I] = buffers->skins,
         },
         .index_buffer = geometry->indices,
+        .vs_images[0] = joint_texture(),
         .fs_images[0] = shadow_map
     };
 
@@ -310,8 +345,9 @@ void sokol_run_scene_pass(
     glm_mat4_copy(state->uniforms.mat_v, vs_u.mat_v);
     glm_mat4_copy(state->uniforms.mat_vp, vs_u.mat_vp);
     glm_mat4_copy(state->uniforms.light_mat_vp, vs_u.light_mat_vp);
-    vs_u.near_ = state->uniforms.near_;
-    vs_u.far_ = state->uniforms.far_;
+    vs_u.joint_uv[0] = joint_texture_u();
+    vs_u.joint_uv[1] = joint_texture_v();
+    vs_u.joint_pixel_width = joint_pixel_width();
 
     scene_fs_uniforms_t fs_u;
     glm_vec3_copy(state->uniforms.light_ambient, fs_u.light_ambient);
@@ -358,9 +394,14 @@ void sokol_run_scene_pass(
     sg_end_pass();
 }
 
-#undef POSITION_I
-#undef NORMAL_I
+#undef VERTEX_I
 #undef COLOR_I
 #undef MATERIAL_I
 #undef TRANSFORM_I
+
+#undef VERTEX_ATTR_I
+#undef COLOR_ATTR_I
+#undef MATERIAL_ATTR_I
+#undef TRANSFORM_ATTR_I
+
 #undef LAYOUT

@@ -7,7 +7,6 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-
 FLECS_SYSTEMS_SOKOL_API
 void FlecsSystemsSokolImport(
     ecs_world_t *world);

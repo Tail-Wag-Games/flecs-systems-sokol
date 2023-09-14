@@ -34,8 +34,7 @@ char* fx_build_shader(
         "uniform float u_far;\n"
         "uniform vec2 u_target_size;\n"
         "uniform mat4 u_mat_p;\n"
-        "uniform mat4 u_inv_mat_p;\n"
-        "uniform sampler2D u_noise;\n");
+        "uniform mat4 u_inv_mat_p;\n");
 
     /* Add inputs */
     for (int32_t i = 0; i < SOKOL_MAX_FX_INPUTS; i ++) {
@@ -142,12 +141,12 @@ int sokol_fx_add_pass(
     };
 
     /* Add noise texture by default */
-    prog.fs.images[0].name = "u_noise";
-    prog.fs.images[0].image_type = SG_IMAGETYPE_2D;
+    // prog.fs.images[0].name = "u_noise";
+    // prog.fs.images[0].image_type = SG_IMAGETYPE_2D;
 
     /* Add inputs to program */
-    for (int32_t i = 1; i < SOKOL_MAX_FX_INPUTS; i ++) {
-        const char *input = pass_desc->inputs[i - 1];
+    for (int32_t i = 0; i < SOKOL_MAX_FX_INPUTS; i ++) {
+        const char *input = pass_desc->inputs[i];
         if (!input) {
             break;
         }
@@ -298,9 +297,9 @@ void fx_draw(
 
     sg_pass_action load_any = sokol_clear_action((ecs_rgb_t){0}, false, false);
     sg_pass_action load_prev = {
-        .colors[0].action = SG_ACTION_LOAD,
-        .depth.action = SG_ACTION_LOAD,
-        .stencil.action = SG_ACTION_LOAD
+        .colors[0].load_action = SG_LOADACTION_LOAD,
+        .depth.load_action = SG_LOADACTION_LOAD,
+        .stencil.load_action = SG_LOADACTION_LOAD
     };
 
     int32_t step_count = pass->step_count;
@@ -374,14 +373,14 @@ void fx_draw(
             if (input.pass == -1) {
                 /* Previous version of current output (for pingponging) */
                 sokol_fx_output_t *io = &pass->outputs[step->output];
-                bind.fs_images[i + 1] = io->out[!io->toggle];
+                bind.fs_images[i] = io->out[!io->toggle];
             } else if (SOKOL_FX_IS_PASS(input.pass)) {
                 /* Pass level input */
-                bind.fs_images[i + 1] = fx->pass[input.pass - SOKOL_MAX_FX_INPUTS]
+                bind.fs_images[i] = fx->pass[input.pass - SOKOL_MAX_FX_INPUTS]
                     .outputs[input.index].out[0];
             } else {
                 /* Effect level input */
-                bind.fs_images[i + 1] = inputs[input.pass];
+                bind.fs_images[i] = inputs[input.pass];
             }
         }
 

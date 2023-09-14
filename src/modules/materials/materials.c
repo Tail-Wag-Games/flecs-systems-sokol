@@ -1,5 +1,8 @@
 #include "materials.h"
 
+ECS_SYSTEM_DECLARE(SokolInitMaterials);
+ECS_SYSTEM_DECLARE(SokolRegisterMaterial);
+
 ECS_COMPONENT_DECLARE(SokolMaterialId);
 ECS_COMPONENT_DECLARE(SokolMaterials);
 
@@ -91,17 +94,17 @@ void FlecsSystemsSokolMaterialsImport(
         "     ?Prefab";
 
     /* System that initializes material array that's sent to vertex shader */
-    ECS_SYSTEM(world, SokolInitMaterials, EcsOnLoad,
+    ECS_SYSTEM_DEFINE(world, SokolInitMaterials, 0,
         [in]   sokol.Query(InitMaterials, SokolMaterials),
         [out]  SokolMaterials);
 
     /* Set material query for InitMaterials system */
-    ecs_set_pair(world, SokolInitMaterials, SokolQuery, ecs_id(SokolMaterials),{
+    ecs_set_pair(world, ecs_id(SokolInitMaterials), SokolQuery, ecs_id(SokolMaterials),{
         ecs_query_new(world, material_query)
     });
 
     /* Assigns material id to entities with material properties */
-    ECS_SYSTEM(world, SokolRegisterMaterial, EcsPostLoad,
+    ECS_SYSTEM_DEFINE(world, SokolRegisterMaterial, 0,
         [out] !flecs.systems.sokol.MaterialId,
         [in]   flecs.components.graphics.Specular(self) || 
                flecs.components.graphics.Emissive(self),

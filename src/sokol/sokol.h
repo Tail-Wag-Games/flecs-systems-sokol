@@ -24,13 +24,21 @@
 #define SOKOL_SHADER_PRECISION "precision highp float;\n"
 #endif
 
-#define SOKOL_DEBUG
+// #define SOKOL_DEBUG
 
 // #ifdef NDEBUG
 // #define SOKOL_ASSERT(c)
 // #endif
 
-#include "sokol_gfx.h"
-#include "sokol_app.h"
-#include "sokol_log.h"
-#include "sokol_glue.h"
+// #define SOKOL_ASSERT(x) ((x)?(1):(sokol_assert_failed(__FILE__,__LINE__,#x),0))
+
+// static inline void
+// sokol_assert_failed(const char* file, int line, const char* expr) {
+//     printf("%s:%i: SOKOL_ASSERT(%s) failed\n", file, line, expr);
+//     exit(1);
+// }
+
+#include "..\..\..\..\sokol-nim\src\sokol\c\sokol_gfx.h"
+#include "..\..\..\..\sokol-nim\src\sokol\c\sokol_app.h"
+#include "..\..\..\..\sokol-nim\src\sokol\c\sokol_log.h"
+#include "..\..\..\..\sokol-nim\src\sokol\c\sokol_glue.h"

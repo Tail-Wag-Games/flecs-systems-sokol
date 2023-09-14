@@ -2,6 +2,8 @@
 
 typedef struct depth_vs_uniforms_t {
     mat4 mat_vp;
+    vec2 joint_uv;
+    float joint_pixel_width;
 } depth_vs_uniforms_t;
 
 typedef struct depth_fs_uniforms_t {
@@ -12,16 +14,76 @@ typedef struct depth_fs_uniforms_t {
     float inv_log_far;
 } depth_fs_uniforms_t;
 
+sg_image joint_texture();
+float joint_pixel_width();
+float joint_texture_u();
+float joint_texture_v();
+
 const char* sokol_vs_depth(void) 
 {
     return SOKOL_SHADER_HEADER
+        "uniform sampler2D u_joint_tex;\n"
+
         "uniform mat4 u_mat_vp;\n"
-        "uniform vec3 u_eye_pos;\n"
-        "layout(location=0) in vec4 v_position;\n"
-        "layout(location=1) in mat4 i_mat_m;\n"
+        "uniform vec2 u_joint_uv;\n"
+        "uniform float u_joint_pixel_width;\n"
+        
+        "in vec4 v_position;\n"
+        "in vec4 jindices;\n"
+        "in vec4 jweights;\n"
+
+        "in mat4 i_mat_m;\n"
         "out vec3 position;\n"
+
+        "void skinned_pos(in vec4 pos, in vec4 skin_weights, in vec4 skin_indices, in vec2 u_joint_uv, out vec4 skin_pos) {\n"
+            "skin_pos = vec4(0.0, 0.0, 0.0, 1.0);\n"
+            "vec4 weights = skin_weights / dot(skin_weights, vec4(1.0));\n"
+            "vec2 step = vec2(u_joint_pixel_width, 0.0);\n"
+            "vec2 uv;\n"
+            "vec4 xxxx, yyyy, zzzz;\n"
+            "if (skin_weights.x <= 0.0 && skin_weights.y <= 0.0 && skin_weights.z <= 0.0 && skin_weights.w <= 0.0) {\n"
+            "    skin_pos = pos;\n"
+            "    return;\n"
+            "}\n"
+            "if (weights.x > 0.0) {\n"
+                "uv = vec2(u_joint_uv.x + (3.0 * skin_indices.x)*u_joint_pixel_width, u_joint_uv.y);\n"
+                "xxxx = textureLod(u_joint_tex, uv, 0.0);\n"
+                "yyyy = textureLod(u_joint_tex, uv + step, 0.0);\n"
+                "zzzz = textureLod(u_joint_tex, uv + 2.0 * step, 0.0);\n"
+                "skin_pos.xyz += vec3(dot(pos,xxxx), dot(pos,yyyy), dot(pos,zzzz)) * weights.x;\n"
+            "}\n"
+            "if (weights.y > 0.0) {\n"
+                "uv = vec2(u_joint_uv.x + (3.0 * skin_indices.y)*u_joint_pixel_width, u_joint_uv.y);\n"
+                "xxxx = textureLod(u_joint_tex, uv, 0.0);\n"
+                "yyyy = textureLod(u_joint_tex, uv + step, 0.0);\n"
+                "zzzz = textureLod(u_joint_tex, uv + 2.0 * step, 0.0);\n"
+                "skin_pos.xyz += vec3(dot(pos,xxxx), dot(pos,yyyy), dot(pos,zzzz)) * weights.y;\n"
+            "}\n"
+            "if (weights.z > 0.0) {\n"
+                "uv = vec2(u_joint_uv.x + (3.0 * skin_indices.z)*u_joint_pixel_width, u_joint_uv.y);\n"
+                "xxxx = textureLod(u_joint_tex, uv, 0.0);\n"
+                "yyyy = textureLod(u_joint_tex, uv + step, 0.0);\n"
+                "zzzz = textureLod(u_joint_tex, uv + 2.0 * step, 0.0);\n"
+                "skin_pos.xyz += vec3(dot(pos,xxxx), dot(pos,yyyy), dot(pos,zzzz)) * weights.z;\n"
+            "}\n"
+            "if (weights.w > 0.0) {\n"
+                "uv = vec2(u_joint_uv.x + (3.0 * skin_indices.w)*u_joint_pixel_width, u_joint_uv.y);\n"
+                "xxxx = textureLod(u_joint_tex, uv, 0.0);\n"
+                "yyyy = textureLod(u_joint_tex, uv + step, 0.0);\n"
+                "zzzz = textureLod(u_joint_tex, uv + 2.0 * step, 0.0);\n"
+                "skin_pos.xyz += vec3(dot(pos,xxxx), dot(pos,yyyy), dot(pos,zzzz)) * weights.w;\n"
+            "}\n"
+        "}\n"
+        
         "void main() {\n"
-        "  gl_Position = u_mat_vp * i_mat_m * v_position;\n"
+        "  vec4 pos;\n"
+        "  skinned_pos(v_position, jweights, jindices * 255.0, u_joint_uv, pos);\n"
+        "  if (jweights.x <= 0.0 && jweights.y <= 0.0 && jweights.z <= 0.0 && jweights.w <= 0.0) {\n"
+        "   gl_Position = u_mat_vp * i_mat_m * v_position;\n"
+        "  } else {\n"
+        "   pos = vec4(dot(pos,vec4(25.0, 0.0, 0.0, 0.0)), dot(pos,vec4(0.0, 25.0, 0.0, 0.0)), dot(pos,vec4(0.0, 0.0, -25.0, -25.0)), 1.0);\n"
+        "   gl_Position = u_mat_vp * pos;\n"
+        "  }\n"
         "  position = gl_Position.xyz;\n"
         "}\n";
 }
@@ -66,12 +128,23 @@ sg_pipeline init_depth_pipeline(int32_t sample_count) {
 
     /* create an instancing shader */
     sg_shader shd = sg_make_shader(&(sg_shader_desc){
-        .vs.uniform_blocks = {
-            [0] = {
-                .size = sizeof(depth_vs_uniforms_t),
-                .uniforms = {
-                    [0] = { .name="u_mat_vp", .type=SG_UNIFORMTYPE_MAT4 }
-                },
+        .vs = {
+            .images = {
+                [0] = {
+                    .name = "u_joint_tex",
+                    .image_type = SG_IMAGETYPE_2D
+                }
+            },
+            .uniform_blocks = {
+                [0] = {
+                    .size = sizeof(depth_vs_uniforms_t),
+                    .uniforms = {
+                        [0] = { .name="u_mat_vp", .type=SG_UNIFORMTYPE_MAT4 },
+                        [1] = { .name="u_joint_uv", .type=SG_UNIFORMTYPE_FLOAT2 },
+                        [2] = { .name="u_joint_pixel_width", .type=SG_UNIFORMTYPE_FLOAT},
+                        [3] = { .name="padding", .type=SG_UNIFORMTYPE_FLOAT}
+                    },
+                }
             }
         },
         .fs.uniform_blocks = { 
@@ -95,18 +168,21 @@ sg_pipeline init_depth_pipeline(int32_t sample_count) {
         .index_type = SG_INDEXTYPE_UINT16,
         .layout = {
             .buffers = {
+                [0] =    { .stride = sizeof(sokol_geometry_vertex_t) },
                 [1] = { .stride = 64, .step_func=SG_VERTEXSTEP_PER_INSTANCE }
             },
 
             .attrs = {
                 /* Static geometry */
-                [0] = { .buffer_index=0, .offset=0,  .format=SG_VERTEXFORMAT_FLOAT3 },
+                [0] = { .buffer_index=0, .format=SG_VERTEXFORMAT_FLOAT3, .offset=offsetof(sokol_geometry_vertex_t, position) },
+                [1] = { .buffer_index=0, .format=SG_VERTEXFORMAT_UBYTE4N, .offset=offsetof(sokol_geometry_vertex_t, joint_indices) },
+                [2] = { .buffer_index=0, .format=SG_VERTEXFORMAT_UBYTE4N, .offset=offsetof(sokol_geometry_vertex_t, joint_weights) },
          
                 /* Matrix (per instance) */
-                [1] = { .buffer_index=1, .offset=0,  .format=SG_VERTEXFORMAT_FLOAT4 },
-                [2] = { .buffer_index=1, .offset=16, .format=SG_VERTEXFORMAT_FLOAT4 },
-                [3] = { .buffer_index=1, .offset=32, .format=SG_VERTEXFORMAT_FLOAT4 },
-                [4] = { .buffer_index=1, .offset=48, .format=SG_VERTEXFORMAT_FLOAT4 }
+                [3] = { .buffer_index=1, .offset=0,  .format=SG_VERTEXFORMAT_FLOAT4 },
+                [4] = { .buffer_index=1, .offset=16, .format=SG_VERTEXFORMAT_FLOAT4 },
+                [5] = { .buffer_index=1, .offset=32, .format=SG_VERTEXFORMAT_FLOAT4 },
+                [6] = { .buffer_index=1, .offset=48, .format=SG_VERTEXFORMAT_FLOAT4 }
             }
         },
         .depth = {
@@ -114,6 +190,7 @@ sg_pipeline init_depth_pipeline(int32_t sample_count) {
             .compare = SG_COMPAREFUNC_LESS_EQUAL,
             .write_enabled = true
         },
+        .face_winding = SG_FACEWINDING_CCW,
         .colors = {{
             .pixel_format = SG_PIXELFORMAT_RGBA8
         }},
@@ -179,7 +256,8 @@ void depth_draw_instances(
             [0] = geometry->vertices,
             [1] = buffers->transforms
         },
-        .index_buffer = geometry->indices
+        .index_buffer = geometry->indices,
+        .vs_images[0] = joint_texture()
     };
 
     sg_apply_bindings(&bind);
@@ -192,6 +270,9 @@ void sokol_run_depth_pass(
 {
     depth_vs_uniforms_t vs_u;
     glm_mat4_copy(state->uniforms.mat_vp, vs_u.mat_vp);
+    vs_u.joint_uv[0] = joint_texture_u();
+    vs_u.joint_uv[1] = joint_texture_v();
+    vs_u.joint_pixel_width = joint_pixel_width();
     
     depth_fs_uniforms_t fs_u;
     glm_vec3_copy(state->uniforms.eye_pos, fs_u.eye_pos);
